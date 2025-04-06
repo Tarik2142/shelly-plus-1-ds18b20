@@ -1,0 +1,137 @@
+substitutions:
+  device_name: "Shelly Plus 1"
+
+esphome:
+  name: shelly-plus-1
+  platformio_options:
+    board_build.f_cpu: 160000000L
+
+esp32:
+  board: esp32doit-devkit-v1
+  framework:
+    type: arduino
+
+wifi:
+  ap:
+    ssid: "Termostat"
+    password: "termo2025"
+
+#captive_portal:
+
+logger:
+
+ota:
+  - platform: esphome
+
+one_wire:
+  - platform: gpio
+    pin: GPIO19
+
+output:
+  - platform: gpio
+    id: "relay_output"
+    pin: GPIO26
+
+switch:
+  - platform: output
+    id: "relay"
+    name: "${device_name} Relay"
+    output: "relay_output"
+
+binary_sensor:
+  - platform: gpio
+    name: "${device_name} Switch"
+    pin: GPIO4
+    on_press:
+      then:
+        - switch.toggle: "relay"
+    filters:
+      - delayed_on_off: 50ms
+  - platform: gpio
+    name: "${device_name} Button"
+    pin:
+      number: GPIO25
+      inverted: yes
+      mode:
+        input: true
+        pullup: true
+    on_press:
+      then:
+        - switch.toggle: "relay"
+    filters:
+      - delayed_on_off: 5ms
+
+sensor:
+  - platform: dallas_temp
+    name: ds_temp
+    id: ds_temp
+    update_interval: 2s
+
+  - platform: ntc
+    sensor: temp_resistance_reading
+    name: "${device_name} Temperature"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+    icon: "mdi:thermometer"
+    calibration:
+      b_constant: 3350
+      reference_resistance: 10kOhm
+      reference_temperature: 298.15K
+    on_value_range:
+      - above: "80.0"
+        then:
+          - switch.turn_off: "relay"
+  
+  - platform: resistance
+    id: temp_resistance_reading
+    sensor: temp_analog_reading
+    configuration: DOWNSTREAM
+    resistor: 10kOhm
+  
+  - platform: adc
+    id: temp_analog_reading
+    pin: GPIO32
+    attenuation: 12db
+
+  - platform: adc
+    name: "${device_name} Relay Supply Voltage"
+    pin: GPIO33
+    attenuation: 12db
+    filters:
+      - multiply: 8
+
+status_led:
+  pin:
+    number: GPIO0
+    inverted: true
+
+climate:
+  - platform: thermostat
+    name: "Thermostat"
+    sensor: ds_temp
+    min_heating_off_time: 300s
+    min_heating_run_time: 60s
+    min_idle_time: 30s
+    visual:
+      min_temperature: 1
+    heat_action:
+      - switch.turn_on: "relay"
+    idle_action:
+      - switch.turn_off: "relay"
+    default_preset: Home
+    preset:
+      - name: Home
+        default_target_temperature_low: 10 °C
+
+web_server:
+  port: 80
+  local: True
+  ota: True
+
+# AP will only be available for 15 minutes after the start
+# script:
+#   - id: wifi_ap_off
+#     mode: restart
+#     then:
+#       - delay: 15min
+#       - lambda: WiFi.softAPdisconnect(1);
